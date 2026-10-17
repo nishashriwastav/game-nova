@@ -1,0 +1,317 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WildCraft Survival - Game Nova</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#17251b;color:white;font-family:Arial;touch-action:none}
+canvas{display:block}
+#hud{position:fixed;top:8px;left:8px;right:8px;z-index:2;background:#102018df;padding:10px;border-radius:12px;font-size:13px;line-height:1.7}
+#message{color:#8dffb4;font-weight:bold}
+#controls{position:fixed;bottom:15px;left:12px;right:12px;z-index:3;display:flex;justify-content:space-between;align-items:end;pointer-events:none}
+.pad{display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:4px;pointer-events:auto}
+button{border:1px solid #ffffff77;background:#15271ddd;color:white;border-radius:12px;font-size:20px;font-weight:bold;touch-action:none}
+.pad button{width:48px;height:48px}
+#up{grid-column:2;grid-row:1}#left{grid-column:1;grid-row:2}
+#down{grid-column:2;grid-row:2}#right{grid-column:3;grid-row:2}
+.actions{display:flex;flex-direction:column;gap:9px;pointer-events:auto}
+.actions button{min-width:100px;min-height:48px;font-size:14px}
+#hint{position:fixed;bottom:175px;left:0;right:0;text-align:center;color:white;text-shadow:0 2px 4px black;font-size:13px;pointer-events:none}
+#back{position:fixed;top:112px;right:10px;z-index:4;color:white;text-decoration:none;background:#15271ddd;padding:8px 12px;border-radius:8px}
+</style>
+</head>
+<body>
+<div id="hud">
+  <b>🌲 WildCraft Survival</b><br>
+  ❤️ Health: <span id="health">100</span>
+  &nbsp; 🍗 Hunger: <span id="hunger">100</span><br>
+  🪵 Wood: <span id="wood">0</span>
+  &nbsp; 🪨 Stone: <span id="stone">0</span>
+  &nbsp; 🍓 Berries: <span id="berries">0</span><br>
+  <span id="message">Explore and survive!</span>
+</div>
+<a id="back" href="index.html">← Home</a>
+<div id="hint">Move with the arrows · Gather nearby resources</div>
+<div id="controls">
+  <div class="pad">
+    <button id="up">▲</button>
+    <button id="left">◀</button>
+    <button id="down">▼</button>
+    <button id="right">▶</button>
+  </div>
+  <div class="actions">
+    <button id="gather">✋ GATHER</button>
+    <button id="eat">🍓 EAT BERRY</button>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x91c9e8);
+scene.fog = new THREE.Fog(0x91c9e8, 35, 100);
+
+const camera = new THREE.PerspectiveCamera(
+  70, innerWidth/innerHeight, 0.1, 200
+);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xd9efff,0x425331,2));
+const sun = new THREE.DirectionalLight(0xfff0cf,2.2);
+sun.position.set(15,25,10);
+sun.castShadow=true;
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(140,140),
+  new THREE.MeshStandardMaterial({color:0x426e36})
+);
+ground.rotation.x=-Math.PI/2;
+ground.receiveShadow=true;
+scene.add(ground);
+
+// Small grass patches
+for(let i=0;i<250;i++){
+  const g=new THREE.Mesh(
+    new THREE.ConeGeometry(.12,.45,3),
+    new THREE.MeshStandardMaterial({color:0x527e37})
+  );
+  g.position.set(Math.random()*100-50,.2,Math.random()*100-50);
+  g.rotation.z=Math.random()*.4;
+  scene.add(g);
+}
+
+function box(w,h,d,color,x,y,z){
+  const m=new THREE.Mesh(
+    new THREE.BoxGeometry(w,h,d),
+    new THREE.MeshStandardMaterial({color})
+  );
+  m.position.set(x,y,z);
+  m.castShadow=true;
+  m.receiveShadow=true;
+  scene.add(m);
+  return m;
+}
+
+// Player
+const player=new THREE.Group();
+const body=box(.8,1.25,.55,0x2876d0,0,1,0);
+body.position.set(0,1,0);
+player.add(body);
+const head=new THREE.Mesh(
+  new THREE.SphereGeometry(.36,16,12),
+  new THREE.MeshStandardMaterial({color:0xe0ad7a})
+);
+head.position.y=1.85;
+head.castShadow=true;
+player.add(head);
+scene.add(player);
+player.position.set(0,0,0);
+
+// Trees
+const resources=[];
+for(let i=0;i<55;i++){
+  const x=Math.random()*90-45,z=Math.random()*90-45;
+  if(Math.hypot(x,z)<5)continue;
+  const tree=new THREE.Group();
+  const trunk=new THREE.Mesh(
+    new THREE.CylinderGeometry(.25,.38,2.2,7),
+    new THREE.MeshStandardMaterial({color:0x725035})
+  );
+  trunk.position.y=1.1;trunk.castShadow=true;tree.add(trunk);
+  const leaves=new THREE.Mesh(
+    new THREE.ConeGeometry(1.25,3,7),
+    new THREE.MeshStandardMaterial({color:0x1f6335})
+  );
+  leaves.position.y=3;leaves.castShadow=true;tree.add(leaves);
+  tree.position.set(x,0,z);scene.add(tree);
+  resources.push({obj:tree,type:'wood',alive:true});
+}
+
+// Rocks
+for(let i=0;i<25;i++){
+  const x=Math.random()*90-45,z=Math.random()*90-45;
+  if(Math.hypot(x,z)<5)continue;
+  const rock=new THREE.Mesh(
+    new THREE.DodecahedronGeometry(.65,0),
+    new THREE.MeshStandardMaterial({color:0x8b9296})
+  );
+  rock.position.set(x,.45,z);
+  rock.castShadow=true;scene.add(rock);
+  resources.push({obj:rock,type:'stone',alive:true});
+}
+
+// Berry bushes
+for(let i=0;i<20;i++){
+  const x=Math.random()*80-40,z=Math.random()*80-40;
+  const bush=new THREE.Mesh(
+    new THREE.SphereGeometry(.65,8,7),
+    new THREE.MeshStandardMaterial({color:0x397a38})
+  );
+  bush.position.set(x,.5,z);scene.add(bush);
+  for(let j=0;j<4;j++){
+    const berry=new THREE.Mesh(
+      new THREE.SphereGeometry(.13,8,6),
+      new THREE.MeshStandardMaterial({color:0xe22c48})
+    );
+    berry.position.set((Math.random()-.5)*.8,.5+Math.random()*.5,
+                       (Math.random()-.5)*.8);
+    bush.add(berry);
+  }
+  resources.push({obj:bush,type:'berries',alive:true});
+}
+
+// Wolves
+const wolves=[];
+for(let i=0;i<5;i++){
+  const wolf=new THREE.Group();
+  const torso=box(1.1,.55,.5,0x777b80,0,.7,0);
+  wolf.add(torso);
+  const headW=box(.42,.42,.42,0x999da1,.55,.85,0);
+  wolf.add(headW);
+  const tail=box(.45,.14,.16,0x62666b,-.7,.85,0);
+  wolf.add(tail);
+  const x=Math.random()*30-15,z=Math.random()*30-15;
+  wolf.position.set(x,0,z);
+  scene.add(wolf);
+  wolves.push({obj:wolf,hp:3,attack:0});
+}
+
+let health=100,hunger=100,wood=0,stone=0,berries=0;
+const keys={};
+let messageTimer=0;
+const $=id=>document.getElementById(id);
+function say(t){$('message').textContent=t;messageTimer=3}
+function updateHUD(){
+  $('health').textContent=Math.max(0,Math.floor(health));
+  $('hunger').textContent=Math.max(0,Math.floor(hunger));
+  $('wood').textContent=wood;
+  $('stone').textContent=stone;
+  $('berries').textContent=berries;
+}
+function bindMove(id,key){
+  const b=$(id);
+  const on=e=>{e.preventDefault();keys[key]=true};
+  const off=e=>{e.preventDefault();keys[key]=false};
+  b.addEventListener('pointerdown',on);
+  b.addEventListener('pointerup',off);
+  b.addEventListener('pointercancel',off);
+  b.addEventListener('pointerleave',off);
+}
+bindMove('up','up');bindMove('down','down');
+bindMove('left','left');bindMove('right','right');
+
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'||e.key==='w')keys.up=true;
+  if(e.key==='ArrowDown'||e.key==='s')keys.down=true;
+  if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;
+  if(e.key==='ArrowRight'||e.key==='d')keys.right=true;
+});
+addEventListener('keyup',e=>{
+  if(['ArrowUp','w'].includes(e.key))keys.up=false;
+  if(['ArrowDown','s'].includes(e.key))keys.down=false;
+  if(['ArrowLeft','a'].includes(e.key))keys.left=false;
+  if(['ArrowRight','d'].includes(e.key))keys.right=false;
+});
+
+$('gather').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  let nearest=null,dist=4;
+  for(const r of resources){
+    if(!r.alive)continue;
+    const d=player.position.distanceTo(r.obj.position);
+    if(d<dist){nearest=r;dist=d}
+  }
+  if(!nearest){say('Go closer to a tree, rock, or bush!');return}
+  nearest.alive=false;
+  scene.remove(nearest.obj);
+  if(nearest.type==='wood'){wood+=2;say('Collected wood! +2')}
+  if(nearest.type==='stone'){stone+=2;say('Collected stone! +2')}
+  if(nearest.type==='berries'){berries+=3;say('Collected berries! +3')}
+  updateHUD();
+});
+
+$('eat').addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  if(berries>0){
+    berries--;hunger=Math.min(100,hunger+25);
+    say('You ate berries. Hunger restored!');
+  }else say('Find a berry bush first!');
+  updateHUD();
+});
+
+// Follow camera and survival loop
+let elapsed=0,last=performance.now(),gameOver=false;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt=Math.min((now-last)/1000,.05);last=now;elapsed+=dt;
+
+  if(!gameOver){
+    const speed=dt*6;
+    let dx=0,dz=0;
+    if(keys.up)dz-=1;if(keys.down)dz+=1;
+    if(keys.left)dx-=1;if(keys.right)dx+=1;
+    const len=Math.hypot(dx,dz)||1;
+    player.position.x+=dx/len*speed;
+    player.position.z+=dz/len*speed;
+    player.position.x=THREE.MathUtils.clamp(player.position.x,-62,62);
+    player.position.z=THREE.MathUtils.clamp(player.position.z,-62,62);
+    if(dx||dz)player.rotation.y=Math.atan2(dx,dz);
+
+    hunger-=dt*.55;
+    if(hunger<0){hunger=0;health-=dt*2}
+    if(hunger>100)hunger=100;
+
+    for(const w of wolves){
+      const p=w.obj.position;
+      const d=p.distanceTo(player.position);
+      if(d>1.25){
+        p.x+=(player.position.x-p.x)/Math.max(d,.01)*dt*1.25;
+        p.z+=(player.position.z-p.z)/Math.max(d,.01)*dt*1.25;
+        w.obj.rotation.y=Math.atan2(
+          player.position.x-p.x,player.position.z-p.z
+        );
+      }else{
+        w.attack-=dt;
+        if(w.attack<=0){health-=5;w.attack=1.2;say('A wolf attacked you!')}
+      }
+    }
+    if(health<=0){
+      health=0;gameOver=true;
+      say('You were defeated! Refresh to try again.');
+      $('hint').textContent='Game over — refresh this page to restart';
+    }
+    if(messageTimer>0)messageTimer-=dt;
+    else $('message').textContent='Explore and survive!';
+    updateHUD();
+  }
+
+  const target=new THREE.Vector3(
+    player.position.x,player.position.y+1,player.position.z
+  );
+  const camPos=new THREE.Vector3(
+    player.position.x,8,player.position.z+10
+  );
+  camera.position.lerp(camPos,.12);
+  camera.lookAt(target);
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(animate);
+
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
